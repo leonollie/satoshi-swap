@@ -252,3 +252,73 @@
     (err ERR-POOL-NOT-FOUND)
   )
 )
+
+;; Calculate expected output from a swap
+(define-read-only (calculate-swap-output
+    (pool-id uint)
+    (input-amount uint)
+    (is-x-to-y bool)
+  )
+  (match (map-get? pools { pool-id: pool-id })
+    pool-info (let (
+        (reserve-in (if is-x-to-y
+          (get reserve-x pool-info)
+          (get reserve-y pool-info)
+        ))
+        (reserve-out (if is-x-to-y
+          (get reserve-y pool-info)
+          (get reserve-x pool-info)
+        ))
+        (fee-adjustment (- FEE-DENOMINATOR (get fee-rate pool-info)))
+      )
+      (ok {
+        output: (/ (* input-amount (* reserve-out fee-adjustment))
+          (+ (* reserve-in FEE-DENOMINATOR) (* input-amount fee-adjustment))
+        ),
+        fee: (/ (* input-amount (get fee-rate pool-info)) FEE-DENOMINATOR),
+      })
+    )
+    (err ERR-POOL-NOT-FOUND)
+  )
+)
+
+;; Calculate pending rewards for a staker in a yield farm
+(define-read-only (calculate-rewards
+    (pool-id uint)
+    (staker principal)
+  )
+  (match (map-get? liquidity-providers {
+    pool-id: pool-id,
+    provider: staker,
+  })
+    provider-info (match (map-get? yield-farms { pool-id: pool-id })
+      farm (let (
+          (blocks-elapsed (- block-height (get last-stake-block provider-info)))
+          (reward-rate (get reward-per-block farm))
+          (stake-amount (get staked-amount provider-info))
+          (total-staked (get total-staked farm))
+        )
+        (ok (if (is-eq total-staked u0)
+          u0
+          (* (* blocks-elapsed reward-rate) (/ stake-amount total-staked))
+        ))
+      )
+      (err ERR-POOL-NOT-FOUND)
+    )
+    (err ERR-NOT-AUTHORIZED)
+  )
+)
+
+;; Get information about a liquidity provider for a specific pool
+(define-read-only (get-provider-info
+    (pool-id uint)
+    (provider principal)
+  )
+  (match (map-get? liquidity-providers {
+    pool-id: pool-id,
+    provider: provider,
+  })
+    provider-info (ok provider-info)
+    (err ERR-NOT-AUTHORIZED)
+  )
+)
