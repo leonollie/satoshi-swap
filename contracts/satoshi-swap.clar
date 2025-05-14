@@ -81,3 +81,84 @@
     twap: uint,
   }
 )
+
+;; Liquidity provider data structure
+(define-map liquidity-providers
+  {
+    pool-id: uint,
+    provider: principal,
+  }
+  {
+    shares: uint,
+    rewards-claimed: uint,
+    staked-amount: uint,
+    last-stake-block: uint,
+    fee-growth-checkpoint-x: uint,
+    fee-growth-checkpoint-y: uint,
+    unclaimed-fees-x: uint,
+    unclaimed-fees-y: uint,
+  }
+)
+
+;; Governance stake data structure
+(define-map governance-stakes
+  { staker: principal }
+  {
+    amount: uint,
+    power: uint,
+    lock-until: uint,
+    delegation: (optional principal),
+  }
+)
+
+;; Flash loan data structure
+(define-map flash-loans
+  { loan-id: uint }
+  {
+    borrower: principal,
+    amount: uint,
+    token: principal,
+    due-block: uint,
+  }
+)
+
+;; Yield farm data structure
+(define-map yield-farms
+  { pool-id: uint }
+  {
+    reward-token: principal,
+    reward-per-block: uint,
+    total-staked: uint,
+    last-reward-block: uint,
+    accumulated-reward-per-share: uint,
+  }
+)
+
+;; Private Helper Functions
+
+;; Returns the minimum of two uint values
+(define-private (min
+    (a uint)
+    (b uint)
+  )
+  (if (<= a b)
+    a
+    b
+  )
+)
+
+;; Calculate liquidity shares for providers
+(define-private (calculate-liquidity-shares
+    (amount-x uint)
+    (amount-y uint)
+    (reserve-x uint)
+    (reserve-y uint)
+    (total-supply uint)
+  )
+  (if (is-eq total-supply u0)
+    INITIAL-LIQUIDITY-TOKENS
+    (min (/ (* amount-x total-supply) reserve-x)
+      (/ (* amount-y total-supply) reserve-y)
+    )
+  )
+)
