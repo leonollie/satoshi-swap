@@ -602,3 +602,82 @@
     (ok true)
   )
 )
+
+;; Multi-hop Swap Functions
+
+;; Execute multiple swaps through a path of pools
+(define-public (multi-hop-swap
+    (path (list 10 uint))
+    (amount-in uint)
+    (min-amount-out uint)
+  )
+  (let (
+      (first-pool (unwrap!
+        (map-get? pools { pool-id: (unwrap! (element-at path u0) ERR-INVALID-PAIR) })
+        ERR-POOL-NOT-FOUND
+      ))
+      (current-amount amount-in)
+    )
+    ;; Execute swaps through path
+    (fold check-and-execute-swap path current-amount)
+    ;; Verify final amount meets minimum
+    (asserts! (>= current-amount min-amount-out) ERR-SLIPPAGE-TOO-HIGH)
+    (ok current-amount)
+  )
+)
+
+;; Yield Farming Functions
+
+;; Create a new yield farm for a specific pool
+(define-public (create-farm
+    (pool-id uint)
+    (reward-token principal)
+    (reward-rate uint)
+  )
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    (map-set yield-farms { pool-id: pool-id } {
+      reward-token: reward-token,
+      reward-per-block: reward-rate,
+      total-staked: u0,
+      last-reward-block: block-height,
+      accumulated-reward-per-share: u0,
+    })
+    (ok true)
+  )
+)
+
+;; Stake LP tokens in a farm to earn rewards
+(define-public (stake-in-farm
+    (pool-id uint)
+    (amount uint)
+  )
+  (let (
+      (provider-info (unwrap!
+        (map-get? liquidity-providers {
+          pool-id: pool-id,
+          provider: tx-sender,
+        })
+        ERR-NOT-AUTHORIZED
+      ))
+      (farm (unwrap! (map-get? yield-farms { pool-id: pool-id }) ERR-POOL-NOT-FOUND))
+    )
+    ;; Update rewards before changing stakes
+    (try! (update-farm-rewards pool-id))
+    ;; Update provider stake
+    (map-set liquidity-providers {
+      pool-id: pool-id,
+      provider: tx-sender,
+    }
+      (merge provider-info {
+        staked-amount: (+ (get staked-amount provider-info) amount),
+        last-stake-block: block-height,
+      })
+    )
+    ;; Update farm total stake
+    (map-set yield-farms { pool-id: pool-id }
+      (merge farm { total-staked: (+ (get total-staked farm) amount) })
+    )
+    (ok true)
+  )
+)
